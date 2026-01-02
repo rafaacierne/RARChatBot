@@ -13,7 +13,7 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 # --- CONFIGURACIÓN GEMINI IA ---
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-pro')
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 SYSTEM_PROMPT = """
 ROL: Asistente virtual de RAR INFORMÁTICA (Chivilcoy).
@@ -87,3 +87,4 @@ def recibir_mensaje():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
