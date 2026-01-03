@@ -13,8 +13,8 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 # --- CONFIGURACIÓN GEMINI IA ---
 try:
-    # AJUSTE CLAVE: Forzamos la versión 'v1' para evitar el error 404
-    client = genai.Client(api_key=GEMINI_API_KEY, http_options={'api_version':'v1'})
+    # Inicializamos el cliente estándar, sin forzar versiones raras
+    client = genai.Client(api_key=GEMINI_API_KEY)
 except Exception as e:
     print(f"Error al iniciar cliente Gemini: {e}")
 
@@ -32,8 +32,9 @@ def consultar_gemini(mensaje_cliente):
     try:
         prompt_completo = f"{SYSTEM_PROMPT}\n\nCliente dice: {mensaje_cliente}\nRespuesta:"
         
+        # CAMBIO CLAVE: Usamos el nombre específico 'gemini-1.5-flash-001'
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-1.5-flash-001",
             contents=prompt_completo
         )
         
@@ -43,8 +44,16 @@ def consultar_gemini(mensaje_cliente):
             return "El modelo generó una respuesta vacía."
             
     except Exception as e:
-        print(f"Error Gemini: {e}")
-        return "Disculpa, estoy reiniciando mis sistemas. Pregúntame de nuevo en 1 minuto."
+        print(f"Error Gemini CRÍTICO: {e}")
+        # Si falla Flash, intentamos con el modelo básico como respaldo
+        try:
+             response = client.models.generate_content(
+                model="gemini-1.5-flash", 
+                contents=prompt_completo
+            )
+             return response.text
+        except:
+            return "Disculpa, estoy reiniciando mis sistemas. Pregúntame de nuevo en 1 minuto."
 
 def enviar_whatsapp(telefono, texto):
     url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
@@ -88,7 +97,9 @@ def recibir_mensaje():
                 
                 if mensaje["type"] == "text":
                     texto = mensaje["text"]["body"]
+                    # Llamamos a la función
                     respuesta = consultar_gemini(texto)
+                    # Respondemos
                     enviar_whatsapp(telefono, respuesta)
                 
     except Exception as e:
