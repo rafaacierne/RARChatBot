@@ -1,7 +1,6 @@
 import os
 from flask import Flask, request, jsonify
-from google import genai
-import requests
+import requests # Usamos requests para todo, chau librería de Google
 
 app = Flask(__name__)
 
@@ -10,13 +9,6 @@ VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN")
 WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-
-# --- CONFIGURACIÓN GEMINI IA ---
-try:
-    # Inicializamos el cliente estándar, sin forzar versiones raras
-    client = genai.Client(api_key=GEMINI_API_KEY)
-except Exception as e:
-    print(f"Error al iniciar cliente Gemini: {e}")
 
 SYSTEM_PROMPT = """
 ROL: Asistente virtual de RAR INFORMÁTICA (Chivilcoy).
@@ -30,30 +22,35 @@ TONO: Profesional, breve y amable.
 
 def consultar_gemini(mensaje_cliente):
     try:
+        # --- PETICIÓN DIRECTA HTTP (REST API) ---
+        # Esto evita cualquier error de la librería de Python.
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+        
         prompt_completo = f"{SYSTEM_PROMPT}\n\nCliente dice: {mensaje_cliente}\nRespuesta:"
         
-        # CAMBIO CLAVE: Usamos el nombre específico 'gemini-1.5-flash-001'
-        response = client.models.generate_content(
-            model="gemini-1.5-flash-001",
-            contents=prompt_completo
-        )
+        payload = {
+            "contents": [{
+                "parts": [{"text": prompt_completo}]
+            }]
+        }
         
-        if response.text:
-            return response.text
+        headers = {'Content-Type': 'application/json'}
+        response = requests.post(url, json=payload, headers=headers)
+        
+        if response.status_code == 200:
+            data = response.json()
+            # Navegamos el JSON de respuesta de Google
+            try:
+                return data["candidates"][0]["content"]["parts"][0]["text"]
+            except:
+                return "Recibí respuesta vacía de la IA."
         else:
-            return "El modelo generó una respuesta vacía."
+            print(f"Error HTTP Gemini: {response.status_code} - {response.text}")
+            return "Error de conexión con la IA."
             
     except Exception as e:
-        print(f"Error Gemini CRÍTICO: {e}")
-        # Si falla Flash, intentamos con el modelo básico como respaldo
-        try:
-             response = client.models.generate_content(
-                model="gemini-1.5-flash", 
-                contents=prompt_completo
-            )
-             return response.text
-        except:
-            return "Disculpa, estoy reiniciando mis sistemas. Pregúntame de nuevo en 1 minuto."
+        print(f"Error General: {e}")
+        return "Disculpa, estoy reiniciando mis sistemas."
 
 def enviar_whatsapp(telefono, texto):
     url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
@@ -67,8 +64,12 @@ def enviar_whatsapp(telefono, texto):
         "type": "text",
         "text": {"body": texto}
     }
-    response = requests.post(url, headers=headers, json=data)
-    return response
+    try:
+        response = requests.post(url, headers=headers, json=data)
+        return response
+    except Exception as e:
+        print(f"Error enviando WhatsApp: {e}")
+        return None
 
 # --- WEBHOOK (VERIFICACIÓN) ---
 @app.route("/webhook", methods=["GET"])
@@ -97,9 +98,9 @@ def recibir_mensaje():
                 
                 if mensaje["type"] == "text":
                     texto = mensaje["text"]["body"]
-                    # Llamamos a la función
+                    # 1. Consultar IA (Método directo)
                     respuesta = consultar_gemini(texto)
-                    # Respondemos
+                    # 2. Responder
                     enviar_whatsapp(telefono, respuesta)
                 
     except Exception as e:
