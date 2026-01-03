@@ -1,3 +1,4 @@
+
 import os
 from flask import Flask, request, jsonify
 import requests
@@ -21,10 +22,9 @@ TONO: Profesional, breve y amable.
 """
 
 def consultar_gemini(mensaje_cliente):
-    # ¡AQUÍ ESTÁ LA CLAVE! Usamos los modelos que VIMOS en tu log
-    # Prioridad 1: gemini-2.0-flash (Confirmado en tu lista)
-    # Prioridad 2: gemini-2.5-flash (El más nuevo)
-    modelos = ["gemini-2.0-flash", "gemini-2.5-flash"]
+    # ESTRATEGIA FINAL: Usar los ALIAS GENÉRICOS que aparecieron en tu diagnóstico.
+    # Estos apuntan automáticamente a la versión estable permitida para tu cuenta.
+    modelos = ["gemini-flash-latest", "gemini-pro-latest"]
     
     prompt_completo = f"{SYSTEM_PROMPT}\n\nCliente dice: {mensaje_cliente}\nRespuesta:"
     
@@ -37,7 +37,7 @@ def consultar_gemini(mensaje_cliente):
 
     for modelo in modelos:
         try:
-            # Usamos la API directa para evitar problemas de librería
+            # URL estándar
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent?key={GEMINI_API_KEY}"
             
             print(f"Probando con: {modelo}...")
@@ -48,9 +48,10 @@ def consultar_gemini(mensaje_cliente):
                 try:
                     return data["candidates"][0]["content"]["parts"][0]["text"]
                 except:
-                    print(f"Modelo {modelo} devolvió JSON raro.")
+                    print(f"Modelo {modelo} devolvió JSON vacío.")
                     continue
             else:
+                # Si falla (429 quota, 404 not found), probamos el siguiente
                 print(f"Error en {modelo}: {response.status_code} - {response.text}")
                 continue
                 
@@ -58,7 +59,7 @@ def consultar_gemini(mensaje_cliente):
             print(f"Excepción en {modelo}: {e}")
             continue
 
-    return "Disculpa, estoy actualizando mis sistemas de IA. Intenta en un momento."
+    return "Disculpa, nuestros sistemas están saturados en este momento. Intenta en un rato."
 
 def enviar_whatsapp(telefono, texto):
     url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
