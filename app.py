@@ -21,9 +21,9 @@ TONO: Profesional, breve y amable.
 """
 
 def consultar_gemini(mensaje_cliente):
-    # LISTA DE MODELOS A PROBAR (EN ORDEN)
-    # Si falla el primero, salta al segundo, y así.
-    modelos = ["gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-pro"]
+    # LISTA DE MODELOS (Actualizada a los más estables)
+    # Probamos el 8b (ligero y rápido) primero, luego el Flash normal, luego el Pro 1.0
+    modelos = ["gemini-1.5-flash-8b", "gemini-1.5-flash", "gemini-1.0-pro"]
     
     prompt_completo = f"{SYSTEM_PROMPT}\n\nCliente dice: {mensaje_cliente}\nRespuesta:"
     
@@ -36,31 +36,28 @@ def consultar_gemini(mensaje_cliente):
 
     for modelo in modelos:
         try:
-            # Probamos conectar con la API
+            # URL estándar v1beta
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent?key={GEMINI_API_KEY}"
             
-            print(f"Intentando conectar con modelo: {modelo}...") # LOG PARA DEPURAR
+            print(f"Probando modelo: {modelo}...") 
             response = requests.post(url, json=payload, headers=headers)
             
             if response.status_code == 200:
                 data = response.json()
                 try:
                     respuesta = data["candidates"][0]["content"]["parts"][0]["text"]
-                    print(f"¡ÉXITO con {modelo}!") 
                     return respuesta
                 except KeyError:
-                    print(f"Modelo {modelo} respondió pero el formato es raro.")
+                    print(f"Modelo {modelo} respondió sin texto.")
                     continue 
             else:
-                # Si falla (404, 500, etc), imprime error y sigue al siguiente
-                print(f"FALLÓ {modelo} con error: {response.status_code} - {response.text}")
+                print(f"FALLÓ {modelo}: {response.status_code} - {response.text}")
                 continue
                 
         except Exception as e:
-            print(f"Error técnico probando {modelo}: {e}")
+            print(f"Error técnico con {modelo}: {e}")
             continue
 
-    # Si llegamos aquí, fallaron los 3
     return "Disculpa, estoy reiniciando mis sistemas. Intenta de nuevo en unos minutos."
 
 def enviar_whatsapp(telefono, texto):
@@ -107,9 +104,7 @@ def recibir_mensaje():
                 
                 if mensaje["type"] == "text":
                     texto = mensaje["text"]["body"]
-                    # 1. Consultar IA (con la lógica de los 3 intentos)
                     respuesta = consultar_gemini(texto)
-                    # 2. Responder
                     enviar_whatsapp(telefono, respuesta)
                 
     except Exception as e:
@@ -120,3 +115,7 @@ def recibir_mensaje():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
