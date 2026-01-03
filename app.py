@@ -11,10 +11,10 @@ WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# --- CONFIGURACIÓN GEMINI IA (NUEVA LIBRERÍA) ---
-# Inicializamos el cliente con la nueva sintaxis
+# --- CONFIGURACIÓN GEMINI IA ---
 try:
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    # AJUSTE CLAVE: Forzamos la versión 'v1' para evitar el error 404
+    client = genai.Client(api_key=GEMINI_API_KEY, http_options={'api_version':'v1'})
 except Exception as e:
     print(f"Error al iniciar cliente Gemini: {e}")
 
@@ -30,16 +30,13 @@ TONO: Profesional, breve y amable.
 
 def consultar_gemini(mensaje_cliente):
     try:
-        # Preparamos el prompt combinando el sistema y el mensaje del usuario
         prompt_completo = f"{SYSTEM_PROMPT}\n\nCliente dice: {mensaje_cliente}\nRespuesta:"
         
-        # Llamada a la nueva API
         response = client.models.generate_content(
             model="gemini-1.5-flash",
             contents=prompt_completo
         )
         
-        # En la nueva librería, response.text suele estar disponible directamente
         if response.text:
             return response.text
         else:
@@ -47,7 +44,7 @@ def consultar_gemini(mensaje_cliente):
             
     except Exception as e:
         print(f"Error Gemini: {e}")
-        return "Disculpa, tuve un error técnico. ¿Me podrías repetir la pregunta?"
+        return "Disculpa, estoy reiniciando mis sistemas. Pregúntame de nuevo en 1 minuto."
 
 def enviar_whatsapp(telefono, texto):
     url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
@@ -80,28 +77,22 @@ def verificar_webhook():
 def recibir_mensaje():
     body = request.get_json()
     try:
-        entry = body["entry"][0]
-        changes = entry["changes"][0]
-        value = changes["value"]
-        
-        if "messages" in value:
-            mensaje = value["messages"][0]
-            telefono = mensaje["from"]
+        if "entry" in body:
+            entry = body["entry"][0]
+            changes = entry["changes"][0]
+            value = changes["value"]
             
-            # Verificamos que sea un mensaje de texto para evitar errores con audios/fotos
-            if mensaje["type"] == "text":
-                texto = mensaje["text"]["body"]
+            if "messages" in value:
+                mensaje = value["messages"][0]
+                telefono = mensaje["from"]
                 
-                # 1. Consultar IA
-                respuesta = consultar_gemini(texto)
-                # 2. Responder en WhatsApp
-                enviar_whatsapp(telefono, respuesta)
-            else:
-                # Opcional: Responder si mandan audio o foto
-                enviar_whatsapp(telefono, "Por el momento solo puedo leer texto.")
-            
+                if mensaje["type"] == "text":
+                    texto = mensaje["text"]["body"]
+                    respuesta = consultar_gemini(texto)
+                    enviar_whatsapp(telefono, respuesta)
+                
     except Exception as e:
-        print(f"Error en el ciclo de mensaje: {e}")
+        print(f"Error procesando mensaje: {e}")
         pass 
 
     return jsonify({"status": "ok"}), 200
