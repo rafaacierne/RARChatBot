@@ -1,6 +1,6 @@
 import os
 from flask import Flask, request, jsonify
-import requests # Usamos requests para todo, chau librería de Google
+import requests
 
 app = Flask(__name__)
 
@@ -21,36 +21,47 @@ TONO: Profesional, breve y amable.
 """
 
 def consultar_gemini(mensaje_cliente):
-    try:
-        # --- PETICIÓN DIRECTA HTTP (REST API) ---
-        # Esto evita cualquier error de la librería de Python.
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-        
-        prompt_completo = f"{SYSTEM_PROMPT}\n\nCliente dice: {mensaje_cliente}\nRespuesta:"
-        
-        payload = {
-            "contents": [{
-                "parts": [{"text": prompt_completo}]
-            }]
-        }
-        
-        headers = {'Content-Type': 'application/json'}
-        response = requests.post(url, json=payload, headers=headers)
-        
-        if response.status_code == 200:
-            data = response.json()
-            # Navegamos el JSON de respuesta de Google
-            try:
-                return data["candidates"][0]["content"]["parts"][0]["text"]
-            except:
-                return "Recibí respuesta vacía de la IA."
-        else:
-            print(f"Error HTTP Gemini: {response.status_code} - {response.text}")
-            return "Error de conexión con la IA."
+    # LISTA DE MODELOS A PROBAR (EN ORDEN)
+    # Si falla el primero, salta al segundo, y así.
+    modelos = ["gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-pro"]
+    
+    prompt_completo = f"{SYSTEM_PROMPT}\n\nCliente dice: {mensaje_cliente}\nRespuesta:"
+    
+    payload = {
+        "contents": [{
+            "parts": [{"text": prompt_completo}]
+        }]
+    }
+    headers = {'Content-Type': 'application/json'}
+
+    for modelo in modelos:
+        try:
+            # Probamos conectar con la API
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent?key={GEMINI_API_KEY}"
             
-    except Exception as e:
-        print(f"Error General: {e}")
-        return "Disculpa, estoy reiniciando mis sistemas."
+            print(f"Intentando conectar con modelo: {modelo}...") # LOG PARA DEPURAR
+            response = requests.post(url, json=payload, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                try:
+                    respuesta = data["candidates"][0]["content"]["parts"][0]["text"]
+                    print(f"¡ÉXITO con {modelo}!") 
+                    return respuesta
+                except KeyError:
+                    print(f"Modelo {modelo} respondió pero el formato es raro.")
+                    continue 
+            else:
+                # Si falla (404, 500, etc), imprime error y sigue al siguiente
+                print(f"FALLÓ {modelo} con error: {response.status_code} - {response.text}")
+                continue
+                
+        except Exception as e:
+            print(f"Error técnico probando {modelo}: {e}")
+            continue
+
+    # Si llegamos aquí, fallaron los 3
+    return "Disculpa, estoy reiniciando mis sistemas. Intenta de nuevo en unos minutos."
 
 def enviar_whatsapp(telefono, texto):
     url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
@@ -65,11 +76,9 @@ def enviar_whatsapp(telefono, texto):
         "text": {"body": texto}
     }
     try:
-        response = requests.post(url, headers=headers, json=data)
-        return response
+        requests.post(url, headers=headers, json=data)
     except Exception as e:
         print(f"Error enviando WhatsApp: {e}")
-        return None
 
 # --- WEBHOOK (VERIFICACIÓN) ---
 @app.route("/webhook", methods=["GET"])
@@ -98,7 +107,7 @@ def recibir_mensaje():
                 
                 if mensaje["type"] == "text":
                     texto = mensaje["text"]["body"]
-                    # 1. Consultar IA (Método directo)
+                    # 1. Consultar IA (con la lógica de los 3 intentos)
                     respuesta = consultar_gemini(texto)
                     # 2. Responder
                     enviar_whatsapp(telefono, respuesta)
